@@ -684,6 +684,10 @@
               "name": "WEBSITE_NODE_DEFAULT_VERSION",
               "value": "18-lts"
             },
+            { 
+              "name": "WEBSITES_CONTAINER_START_TIME_LIMIT", 
+              "value": "1800" 
+            },
             {
               "name": "DOCKER_ENABLE_CI",
               "value": "true"
