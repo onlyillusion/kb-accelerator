@@ -1,16 +1,19 @@
 import azure.functions as func
-import logging, requests, os
+import logging, os
+import requests
 from concurrent.futures import ThreadPoolExecutor
+from dotenv import load_dotenv
+load_dotenv()
 
 app = func.FunctionApp()
 executor = ThreadPoolExecutor(max_workers=1)
 
-CSV_INGESTION_API_BASE_URL=f"{os.getenv("BACKEND_API_URL")}/ingest_blob_csv"
 CONTAINER_NAME=os.getenv("CONTAINER_NAME")
-AZURE_APP_SERVICE_URL_FOR_MULTIMODAL_INGESTION=f"{os.getenv("BACKEND_API_URL")}/process_document"
+BACKEND_API_URL=os.getenv("BACKEND_API_URL")
+BACKEND_API_KEY=os.getenv("BACKEND_API_KEY")
 
 @app.blob_trigger(arg_name="myblob", path="maadendocs/{name}",
-                               connection="saknowledgebottest_STORAGE") 
+                               connection="AzureWebJobsStorage") 
 def sa_trigger(myblob: func.InputStream):
     logging.info(f"Python blob trigger function processed blob"
                 f"Name: {myblob.name}"
@@ -23,11 +26,19 @@ def sa_trigger(myblob: func.InputStream):
     if not blob_name.endswith((".csv", ".xls", ".xlsx")):
         logging.info(f"File {blob_name} is a PDF.")
         blob_data = myblob.read()
+        logging.info(
+            f"File {blob_name}. Initiating Request to MultiModal Ingestion"
+        )
+        constructed_url = f"{BACKEND_API_URL}/process_document"
+        logging.info(constructed_url)
+        logging.info(f"x-api-key: {BACKEND_API_KEY}")
+
+        header = {
+            "x-api-key": BACKEND_API_KEY,
+            "accept": "application/json"
+        }
         try:
-            logging.info(
-                f"File {blob_name}. Initiating Request to MultiModal Ingestion"
-            )
-            executor.submit(send_document_file_async, blob_name, blob_data)
+            executor.submit(send_document_file_async, blob_name, blob_data, constructed_url, header)
             # mark_blob_as_processed(blob_name)
         except requests.exceptions.RequestException as e:
             logging.error(f"Failed to send file {blob_name}: {e}")
@@ -35,10 +46,10 @@ def sa_trigger(myblob: func.InputStream):
         logging.info(
             f"File {blob_name} is a CSV, XLS and XLSX. Initiating request to the CSV, XLS and XLSX Ingestion Pipeline."
         )
-        constructed_url = f"{CSV_INGESTION_API_BASE_URL}?container={CONTAINER_NAME}"
+        constructed_url = f"{BACKEND_API_URL}/ingest_blob_csv?container={CONTAINER_NAME}"
 
         header = {
-            "x-api-key": os.getenv("CSV_INGESTION_API_KEY"),
+            "x-api-key": BACKEND_API_KEY,
             "accept": "application/json",
         }
         try:
@@ -47,15 +58,21 @@ def sa_trigger(myblob: func.InputStream):
             logging.error(f"Request to CSV Ingestion Pipeline failed due to: {e}")
 
 
-def send_document_file_async(blob_name, blob_data):
+def send_document_file_async(blob_name, blob_data, constructed_url, header):
     try:
         response = requests.post(
-            AZURE_APP_SERVICE_URL_FOR_MULTIMODAL_INGESTION,
+            constructed_url,
             files={"file": (blob_name, blob_data)},
+            headers=header
         )
-        logging.info(
-            f"File {blob_name} sent successfully to MultiModal Ingestion Pipeline. Status code: {response.status_code}"
-        )
+        if response.status_code == 200:
+            logging.info(
+                f"File {blob_name} sent successfully to MultiModal Ingestion Pipeline. Status code: {response.status_code}"
+            )
+        else:
+            logging.error(
+                f"Failed to send file {blob_name}. Status code: {response.status_code}. Response: {response.text}"
+            )
     except requests.RequestException as exc:
         logging.error(f"An error occurred while sending the file: {exc}")
 

@@ -7,4 +7,5 @@ azure-core
 azure-ai-formrecognizer
 azure-search-documents
 azure-identity
-PyMuPDF 
+PyMuPDF
+python-dotenv
