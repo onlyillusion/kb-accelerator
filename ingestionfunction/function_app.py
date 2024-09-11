@@ -12,7 +12,7 @@ CONTAINER_NAME=os.getenv("CONTAINER_NAME")
 BACKEND_API_URL=os.getenv("BACKEND_API_URL")
 BACKEND_API_KEY=os.getenv("BACKEND_API_KEY")
 
-@app.blob_trigger(arg_name="myblob", path="maadendocs/{name}",
+@app.blob_trigger(arg_name="myblob", path=f"{CONTAINER_NAME}/{{name}}",
                                connection="AzureWebJobsStorage") 
 def sa_trigger(myblob: func.InputStream):
     logging.info(f"Python blob trigger function processed blob"
