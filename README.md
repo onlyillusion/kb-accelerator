@@ -82,7 +82,7 @@ If your Knowledge Bot HR integrates with OpenAI models, follow these steps:
 
 1. Go to the **Azure Function App** resource that was provisioned during deployment.
 2. In the **Functions** tab, click **Add** to create a new function.
-3. Select the appropriate template (e.g., HTTP Trigger) based on your chatbot logic.
+3. Select the appropriate template (Blob Trigger) based on your chatbot logic.
 4. Add the **function code** that handles requests to and from the chatbot's backend.
    - use deployment center to deploy code using github connection. Use the ingestionfunction folder for deploying the function code.
 5. Save and test the function by uploading a file from the chatbot.
