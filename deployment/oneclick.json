@@ -181,7 +181,7 @@
         "description": "Name of the Azure OpenAI service"
       }
     },
-    "aoiKey": {
+    "openAiServiceKey": {
       "type": "securestring"
       },
     "sqlServerName": {
@@ -641,7 +641,7 @@
             },
             {
               "name": "PROMO_IMAGE",
-              "value": ""
+              "value": "https://res.cloudinary.com/lemon-mint/image/upload/v1721982067/arab4_h8chkz.png"
             },
             {
               "name": "FEEDBACK_LINK",
@@ -739,8 +739,8 @@
             { "name": "AZURE_REDIS_CACHE_HOST", "value": "[reference(resourceId('Microsoft.Cache/Redis', parameters('redisCacheName'))).hostName]" },
             { "name": "AZURE_REDIS_CACHE_PASSWORD", "value": "[listKeys(resourceId('Microsoft.Cache/Redis', parameters('redisCacheName')), '2022-06-01').primaryKey]" },
             { "name": "AZURE_REDIS_CACHE_PORT", "value": "6380" },
-            { "name": "AZURE_OPENAI_API_BASE", "value": "https://mobiz-gpt-4-deployment.openai.azure.com/" },
-            { "name": "AZURE_OPENAI_API_KEY", "value": "[parameters('aoiKey')]" },
+            { "name": "AZURE_OPENAI_API_BASE", "value": "[format('https://{0}.openai.azure.com/', parameters('openAiServiceName'))]" },
+            { "name": "AZURE_OPENAI_API_KEY", "value": "[parameters('openAiServiceKey')]" },
             { "name": "AZURE_OPENAI_MODEL_GPT4_TURBO", "value": "gpt-4o" },
             { "name": "AZURE_OPENAI_MODEL_GPT35", "value": "gpt35-turbo" },
             { "name": "AZURE_OPENAI_EMBED_MODEL", "value": "ada-002" },
