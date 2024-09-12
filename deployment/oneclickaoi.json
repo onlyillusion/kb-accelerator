@@ -4,23 +4,22 @@
   "parameters": {
     "organizationName": {
       "type": "string",
-       "defaultValue": "Maaden",
       "metadata": {
         "description": "Enter the organization or company name"
       }
     },
     "applicationID": {
-      "type": "string"
+      "type": "string",
+      "metadata": {
+        "description": "App Registration Client ID"
+      }
     },
-    "applicationToken": {
-      "type": "securestring"
+    "applicationSecretKey": {
+      "type": "securestring",
+      "metadata": {
+        "description": "App Registration Secret Key"
+      }
     },
-    "repositoryUrl": {
-    "type": "string"
-    },
-    "repositoryToken": {
-      "type": "securestring"
-      },
     "applicationName": {
       "type": "string",
       "defaultValue": "[toLower(split(parameters('organizationName'), ' ')[0])]",
@@ -37,17 +36,23 @@
     },
     "environmentType": {
       "type": "string",
-      "defaultValue": "nonprod",
+      "defaultValue": "dev",
       "allowedValues": [
-        "nonprod",
+        "dev",
         "prod"
       ]
     },
-    "acrName": {
+    "acrUsername": {
       "type": "string",
       "defaultValue": "fastapidemo",
       "metadata": {
-        "description": "The name of the Azure Container Registry"
+        "description": "The username for the Azure Container Registry"
+      }
+    },
+    "acrPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The password for the Azure Container Registry"
       }
     },
     "appConfigName": {
@@ -71,13 +76,6 @@
         "description": "Azure Cognitive Search Container"
       }
     },
-    "blobApplicationContainerName": {
-      "type": "string",
-      "defaultValue": "[concat(parameters('applicationName'), 'app')]",
-      "metadata": {
-        "description": "Application Container"
-      }
-    },
     "servicePlanName": {
       "type": "string",
       "defaultValue": "[format('asp-{0}-{1}', parameters('applicationName'), parameters('environmentType'))]",
@@ -85,23 +83,16 @@
         "description": "Name of the App Service Plan"
       }
     },
-    "servicePlanNameLA": {
-      "type": "string",
-      "defaultValue": "[format('asp-{0}-{1}-logic-app', parameters('applicationName'), parameters('environmentType'))]",
-      "metadata": {
-        "description": "Name of the App Service Plan for Logic App"
-      }
-    },
     "backendWebAppName": {
       "type": "string",
-      "defaultValue": "[format('{0}-{1}-backend', parameters('applicationName'), parameters('environmentType'))]",
+      "defaultValue": "[format('backend-{0}-{1}', parameters('applicationName'), parameters('environmentType'))]",
       "metadata": {
         "description": "Name of the Linux Web App Backend"
       }
     },
     "frontendWebAppName": {
       "type": "string",
-      "defaultValue": "[format('{0}-{1}-frontend', parameters('applicationName'), parameters('environmentType'))]",
+      "defaultValue": "[format('frontend-{0}-{1}', parameters('applicationName'), parameters('environmentType'))]",
       "metadata": {
         "description": "Name of the Linux Web App Frontend"
       }
@@ -148,13 +139,6 @@
         "description": "Name of the Redis Cache"
       }
     },
-    "logicAppName": {
-      "type": "string",
-      "defaultValue": "[format('la-{0}-{1}', parameters('applicationName'), parameters('environmentType'))]",
-      "metadata": {
-        "description": "Name of the Logic App"
-      }
-    },
     "functionAppName": {
       "type": "string",
       "defaultValue": "[format('blobtrigger-{0}-{1}', parameters('applicationName'), parameters('environmentType'))]",
@@ -164,7 +148,7 @@
     },
     "eventGridTopicName": {
       "type": "string",
-      "defaultValue": "[format('eventgrid-blobtrigger-{0}-{1}', parameters('applicationName'), parameters('environmentType'))]",
+      "defaultValue": "[format('gridtopic-{0}-{1}', parameters('applicationName'), parameters('environmentType'))]",
       "metadata": {
         "description": "Name of the Event Grid Topic"
       }
@@ -183,6 +167,13 @@
           "description": "Name of the Azure Document Intelligence service"
       }
   },
+  "languageServicesName": {
+    "type": "string",
+      "defaultValue": "[format('lang-{0}-{1}', parameters('applicationName'), parameters('environmentType'))]",
+    "metadata": {
+      "description": "Name of the Azure Language service"
+    }
+  },
     "openAiServiceName": {
       "type": "string",
       "defaultValue": "[format('azure-openai-{0}-{1}', parameters('applicationName'), parameters('environmentType'))]",
@@ -190,19 +181,9 @@
         "description": "Name of the Azure OpenAI service"
       }
     },
-    "aoiKey": {
-      "type": "securestring"
-      },
-    "sqlServerName": {
-      "type": "string",
-      "defaultValue": "[format('azure-sql-{0}-{1}', parameters('applicationName'), parameters('environmentType'))]",
-      "metadata": {
-        "description": "Name of the SQL Server"
-      }
-    },
     "sqlAdminUsername": {
       "type": "string",
-      "defaultValue": "[format('{0}sa', parameters('applicationName'))]",
+      "defaultValue": "[format('{0}user', parameters('applicationName'))]",
       "metadata": {
         "description": "SQL Server admin username"
       }
@@ -233,7 +214,10 @@
     }
   },
   "variables": {
-      "appConfigSku": "standard"
+      "appConfigSku": "standard",
+      "acrFrontendImage": "knowledgebot-frontend:maaden",
+      "acrBackendImage": "knowledgebot-backend:maaden",
+      "acrLoginServer": "fastapidemo.azurecr.io"
   },
   "resources": [
     //////////Storage Account//////////
@@ -266,16 +250,6 @@
         "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
       ]
     },
-    //////////Create Application Storage Container//////////
-    {
-      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-      "apiVersion": "2021-08-01",
-      "name": "[concat(parameters('storageAccountName'), '/default/', parameters('blobApplicationContainerName'))]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
-      ],
-      "properties": {}
-    },
     //////////Create App Config//////////
     {
       "type": "Microsoft.AppConfiguration/configurationStores",
@@ -296,7 +270,7 @@
         "[resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName'))]"
       ],
       "properties": {
-        "value": "{\"General\": \"mobizgeneraldocs\", \"Sales\": \"mobizsalesdocs\", \"HR\": \"mobizhrdocs\", \"Tatweer\": \"tatweerdocs\", \"Maaden\": \"maadendocs\"}",
+        "value": "[concat('{\"', parameters('organizationName'), '\": \"', parameters('blobCogSearchContainerName'), '\"}')]",
         "contentType": "application/json"
       }
     },
@@ -309,7 +283,7 @@
         "[resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName'))]"
       ],
       "properties": {
-        "value": "{\"kb-hr\": [\"mobizhrindex\", \"mobizgeneralindex\"], \"kb-sales\": [\"mobizsalesindex\", \"mobizgeneralindex\"],\"kb-dev\": [\"mobizgeneralindex\", \"tatweer-index-custom\", \"maaden-index\"],\"kb-tatweer\": [\"tatweer-index-custom\"]}",
+        "value": "[concat('{\"kb-dev\": [\"', format('{0}-index', parameters('applicationName')), '\"]}')]",
         "contentType": "application/json"
       }
     },
@@ -322,7 +296,7 @@
         "[resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName'))]"
       ],
       "properties": {
-        "value": "{\"mobizgeneralindex\": \"General\", \"mobizhrindex\": \"HR\", \"mobizsalesindex\": \"Sales\", \"tatweer-index-custom\": \"Tatweer\", \"maaden-index\": \"Maaden\"}",
+        "value": "[concat('{\"', format('{0}-index', parameters('applicationName')), '\": \"', parameters('organizationName'), '\"}')]",
         "contentType": "application/json"
       }
     },
@@ -345,234 +319,6 @@
       },
       "properties": {
         "reserved": true
-      }
-    },
-    //////////Linux Webapp Backend//////////
-    {
-      "type": "Microsoft.Web/sites",
-      "apiVersion": "2023-12-01",
-      "name": "[parameters('backendWebAppName')]",
-      "location": "[parameters('location')]",
-      "tags": {
-        "environment"     : "[parameters('environmentType')]",
-        "application_name": "[parameters('applicationName')]",
-        "project_code"    : "[parameters('projectCode')]",
-        "owner"           : "[parameters('owner')]"
-      },
-      "kind": "app,linux,container",
-      "dependsOn": [
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]",
-        "[resourceId('Microsoft.DocumentDB/databaseAccounts', variables('accountName_var'))]",
-        "[resourceId('Microsoft.Insights/components', parameters('applicationInsightsName'))]",
-        "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('languageServicesName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
-        "[resourceId('Microsoft.Search/searchServices', parameters('cogSearchName'))]",
-        "[resourceId('Microsoft.Web/sites', parameters('frontendWebAppName'))]",
-        "[resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('languageServicesName'))]",
-        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('documentIntelligenceName'))]"
-      ],
-      "identity": {
-        "type": "UserAssigned",
-        "userAssignedIdentities": {
-            "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]": {}
-        }
-      },
-      "properties": {
-        "enabled": true,
-        "hostNameSslStates": [
-            {
-                "name": "[concat(parameters('backendWebAppName'), '.azurewebsites.net')]",
-                "sslState": "Disabled",
-                "hostType": "Standard"
-            },
-            {
-                "name": "[concat(parameters('backendWebAppName'), '.scm.azurewebsites.net')]",
-                "sslState": "Disabled",
-                "hostType": "Repository"
-            }
-        ],
-        "keyVaultReferenceIdentity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]",
-        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
-        "siteConfig": {
-          "linuxFxVersion": "DOCKER|fastapidemo.azurecr.io/knowledgebot-backend:maaden",
-          "alwaysOn": true,
-          "vnetRouteAllEnabled": true,
-          "appCommandLine": "python -m uvicorn main:app --host 0.0.0.0",
-          "pythonversion": "3.10",
-          "cors": {
-            "allowedOrigins": [
-                   "http://localhost:3000",
-                   "[concat('https://', reference(resourceId('Microsoft.Web/sites', parameters('frontendWebAppName'))).defaultHostName)]"
-                ],
-            "supportCredentials": true
-          },
-          "appSettings": [
-            { "name": "ALLOWED_ORIGINS", "value": "[concat('https://', reference(resourceId('Microsoft.Web/sites', parameters('frontendWebAppName'))).defaultHostName)]" },
-            { "name": "DATABASE_HOST", "value": "[parameters('sqlServerName')].database.windows.net" },
-            { "name": "DATABASE_HOSTNAME", "value": "[parameters('sqlServerName')].database.windows.net" },
-            { "name": "DATABASE_DB", "value": "[parameters('sqlDatabaseName')]" },
-            { "name": "DATABASE_USER", "value": "[parameters('sqlAdminUsername')]" },
-            { "name": "DATABASE_PASSWORD", "value": "[parameters('sqlAdminPassword')]" },
-            { "name": "ACCESS_TOKEN_EXPIRES_IN", "value": "15" },
-            { "name": "REFRESH_TOKEN_EXPIRES_IN", "value": "60" },
-            { "name": "JWT_ALGORITHM", "value": "HS256" },
-            { "name": "AZURE_CLIENT_ID", "value": "[parameters('applicationID')]" },
-            { "name": "AZURE_CLIENT_SECRET", "value": "[parameters('applicationToken')]" },
-            { "name": "AZURE_TENANT_ID", "value": "[subscription().tenantId]" },
-            { "name": "AZURE_REDIS_CACHE_HOST", "value": "[reference(resourceId('Microsoft.Cache/Redis', parameters('redisCacheName'))).hostName]" },
-            { "name": "AZURE_REDIS_CACHE_PASSWORD", "value": "[listKeys(resourceId('Microsoft.Cache/Redis', parameters('redisCacheName')), '2022-06-01').primaryKey]" },
-            { "name": "AZURE_REDIS_CACHE_PORT", "value": "6380" },
-            { "name": "AZURE_OPENAI_API_BASE", "value": "https://mobiz-gpt-4-deployment.openai.azure.com/" },
-            { "name": "AZURE_OPENAI_API_KEY", "value": "[parameters('aoiKey')]" },
-            { "name": "AZURE_OPENAI_MODEL_GPT4_TURBO", "value": "gpt4-turbo" },
-            { "name": "AZURE_OPENAI_MODEL_GPT35", "value": "gpt35-turbo" },
-            { "name": "AZURE_OPENAI_EMBED_MODEL", "value": "ada-002" },
-            { "name": "OPENAI_API_KEY", "value": "" },
-            { "name": "OPENAI_API_VERSION", "value": "2023-05-15" },
-            { "name": "OPENAI_MODEL", "value": "gpt4-turbo" },
-            { "name": "OPENAI_EMBED_MODEL", "value": "text-embedding-3-small" },
-            { "name": "AZURE_COGNITIVE_SEARCH_ENDPOINT", "value": "[reference(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))).primaryEndpoints.search]" },
-            { "name": "AZURE_COGNITIVE_SEARCH_API_KEY", "value": "[listKeys(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), '2022-12-01').keys[0].value]" },
-            { "name": "SEARCH_SERVICE_NAME", "value": "[parameters('searchServiceName')]" },
-            { "name": "AZURE_COGNITIVE_SEARCH_API_VERSION", "value": "2023-07-01-Preview" },
-            { "name": "AZURE_STORAGE_NAME", "value": "[parameters('storageAccountName')]" },
-            { "name": "AZURE_STORAGE_KEY", "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2022-09-01').keys[0].value]" },
-            { "name": "AZURE_STORAGE_CONNECTION_STRING", "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', parameters('storageAccountName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2022-09-01').keys[0].value)]" },
-            { "name": "AZURE_SEARCH_BLOB_CONTAINER_NAME", "value": "[parameters('blobCogSearchContainerName')]" },
-            { "name": "AZURE_APP_BLOB_CONTAINER_NAME", "value": "[parameters('blobApplicationContainerName')]" },
-            { "name": "DOCUMENT_CHUNK_SIZE", "value": "1000" },
-            { "name": "DOCUMENT_CHUNK_OVERLAP", "value": "100" },
-            { "name": "DOCUMENT_K_TOP", "value": "5" },
-            { "name": "UPLOAD_DOCUMENTS", "value": "False" },
-            { "name": "INDEX_DOCUMENT", "value": "False" },
-            { "name": "INDEX_NAME", "value": "[concat(parameters('applicationName'), '-index')]" },
-            { "name": "ENABLE_JSON_INGESTION", "value": "True" },
-            { "name": "ENBALE_SIMPLE_TEXT_INGESTION", "value": "True" },
-            { "name": "ENABLE_TEXT_RAPTOR_INGESTION", "value": "False" },
-            { "name": "ENABLE_TABLE_INGESTION", "value": "False" },
-            { "name": "ENABLE_IMAGE_INGESTION", "value": "False" },
-            { "name": "LANGCHAIN_API_KEY", "value": "" },
-            { "name": "LANGCHAIN_PROJECT", "value": "" },
-            { "name": "AZURE_APPINSIGHTS_INSTRUMENTATIONKEY", "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsBE'))).InstrumentationKey]" },
-            { "name": "AZURE_APPINSIGHTS_CONNECTION_STRING", "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsBE'))).ConnectionString]" },
-            { "name": "AZURE_APPCONFIG_ENDPOINT", "value": "[reference(resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName'))).endpoint]" },
-            { "name": "AZURE_APPCONFIG_KEY", "value": "[listKeys(resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName')), '2021-10-01-preview').value[0].value]" },
-            { "name": "AZURE_APPCONFIG_CONNECTION_STRING", "value": "[listKeys(resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName')), '2021-10-01-preview').value[0].connectionString]" },
-            { "name": "AZURE_LANGUAGE_ENDPOINT", "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('languageServicesName'))).endpoint]" },
-            { "name": "AZURE_LANGUAGE_KEY", "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts', parameters('languageServicesName')), '2021-10-01').key1]" },
-            { "name": "AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT", "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('documentIntelligenceName'))).endpoint]" },
-            { "name": "AZURE_DOCUMENT_INTELLIGENCE_KEY", "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts', parameters('documentIntelligenceName')), '2021-10-01').key1]" },
-            { "name": "LOG_LEVEL", "value": "DEBUG" },
-            { "name": "WEBSITES_CONTAINER_START_TIME_LIMIT", "value": "1800" },
-            { "name": "MI_CLIENT_ID", "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))).clientId]" },
-            { "name": "DOCKER_ENABLE_CI", "value": "True" },
-            { "name": "DOCKER_REGISTRY_SERVER_USERNAME", "value": "[parameters('acrName')]" },
-            { "name": "DOCKER_REGISTRY_SERVER_URL", "value": "[concat('https://', parameters('acrName'), '.azurecr.io')]" },
-            { "name": "DOCKER_REGISTRY_SERVER_PASSWORD", "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), '2022-12-01').passwords[0].value]" }
-          ]
-        }
-      }
-    },
-    //////////Linux Webapp Frontend//////////
-    {
-      "type": "Microsoft.Web/sites",
-      "apiVersion": "2022-09-01",
-      "name": "[parameters('frontendWebAppName')]",
-      "location": "[parameters('location')]",
-      "tags": {
-        "environment"     : "[parameters('environmentType')]",
-        "application_name": "[parameters('applicationName')]",
-        "project_code"    : "[parameters('projectCode')]",
-        "owner"           : "[parameters('owner')]"
-      },
-      "kind": "app,linux,container",
-      "dependsOn": [
-        "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]"
-      ],
-      "properties": {
-        "httpsOnly": true,
-        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
-        "siteConfig": {
-          "alwaysOn": true,
-          "linuxFxVersion": "DOCKER|fastapidemo.azurecr.io/knowledgebot-frontend:maaden",
-          "nodeVersion": "18-lts",
-          "appSettings": [
-            {
-              "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
-              "value": "false"
-            },
-            {
-              "name": "DOCKER_REGISTRY_SERVER_URL",
-              "value": "[concat('https://', parameters('acrName'), '.azurecr.io')]"
-            },
-            {
-              "name": "DOCKER_REGISTRY_SERVER_USERNAME",
-              "value": "[parameters('acrName')]"
-            },
-            {
-              "name": "DOCKER_REGISTRY_SERVER_PASSWORD",
-              "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', parameters('acrName')), '2022-12-01').passwords[0].value]"
-            },
-            {
-              "name": "NEXTAUTH_SECRET",
-              "value": "ZmPyZU/WBIa4oATeVrDnm/ZDnAq8dzVLtrbZZRcoMRg="
-            },
-            {
-              "name": "NEXTAUTH_URL",
-              "value": "[concat('https://', parameters('frontendWebAppName'), '.azurewebsites.net')]"
-            },
-            {
-              "name": "AZURE_AD_CLIENT_ID",
-              "value": "[parameters('applicationID')]"
-            },
-            {
-              "name": "AZURE_AD_CLIENT_SECRET",
-              "value": "[parameters('applicationToken')]"
-            },
-            {
-              "name": "AZURE_AD_TENANT_ID",
-              "value": "[subscription().tenantId]"
-            },
-            {
-              "name": "API_URL",
-              "value": "[concat('https://', parameters('backendWebAppName'), '.azurewebsites.net')]"
-            },
-            {
-              "name": "PROMO_IMAGE",
-              "value": ""
-            },
-            {
-              "name": "FEEDBACK_LINK",
-              "value": ""
-            },
-            {
-              "name": "INDEX_NAME",
-              "value": "[concat(parameters('applicationName'), '-index')]"
-            },
-            {
-              "name": "ORGANIZATION_NAME",
-              "value": "[parameters('organizationName')]"
-            },
-            {
-              "name": "COMPANY_NAME",
-              "value": "[parameters('organizationName')]"
-            },
-            {
-              "name": "WEBSITE_NODE_DEFAULT_VERSION",
-              "value": "18-lts"
-            },
-            {
-              "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
-              "value": "FALSE"
-            },
-            {
-              "name": "DOCKER_ENABLE_CI",
-              "value": "TRUE"
-            }
-          ]
-        }
       }
     },
     //////////Managed Identity//////////
@@ -634,16 +380,19 @@
       "name": "[parameters('appInsightsBE')]",
       "location": "[parameters('location')]",
       "tags": {
-        "environment"     : "[parameters('environmentType')]",
+        "environment": "[parameters('environmentType')]",
         "application_name": "[parameters('applicationName')]",
-        "project_code"    : "[parameters('projectCode')]",
-        "owner"           : "[parameters('owner')]"
+        "project_code": "[parameters('projectCode')]",
+        "owner": "[parameters('owner')]"
       },
+      "kind": "web",
       "properties": {
         "Application_Type": "web",
         "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
       },
-      "kind": "web"
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+      ]
     },
     //////////App Insight Blob//////////
     {
@@ -703,88 +452,6 @@
         "minimumTlsVersion": "1.2"
       }
     },
-    //////////Linux Function App//////////
-    {
-      "type": "Microsoft.Web/sites",
-      "apiVersion": "2022-09-01",
-      "name": "[parameters('functionAppName')]",
-      "location": "[parameters('location')]",
-      "kind": "functionapp,linux",
-      "tags": {
-        "environment"     : "[parameters('environmentType')]",
-        "application_name": "[parameters('applicationName')]",
-        "project_code"    : "[parameters('projectCode')]",
-        "owner"           : "[parameters('owner')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
-        "[resourceId('Microsoft.Insights/components', parameters('appInsightsBlob'))]",
-        "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
-        "[resourceId('Microsoft.Web/sites', parameters('backendWebAppName'))]"
-      ],
-      "identity": {
-        "type": "SystemAssigned"
-      },
-      "properties": {
-        "httpsOnly": true,
-        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
-        "siteConfig": {
-          "linuxFxVersion": "Python|3.10",
-          "vnetRouteAllEnabled": true,
-          "alwaysOn": true,
-          "pythonversion": "3.10",
-          "appSettings": [
-              {
-                  "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
-                  "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsBlob'))).InstrumentationKey]"
-              },
-              {
-                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
-                  "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsBlob'))).ConnectionString]"
-              },
-              {
-                  "name": "AzureWebJobsStorage",
-                  "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', parameters('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2021-08-01').keys[0].value)]"
-              },
-              {
-                  "name": "FUNCTIONS_EXTENSION_VERSION",
-                  "value": "~4"
-              },
-              {
-                  "name": "FUNCTIONS_WORKER_RUNTIME",
-                  "value": "python"
-              },
-              {
-                  "name": "CONTAINER_NAME",
-                  "value": "[parameters('blobCogSearchContainerName')]"
-              },
-              {
-                  "name": "BACKEND_API_URL",
-                  "value": "[concat('https://', reference(resourceId('Microsoft.Web/sites', parameters('backendWebAppName'))).defaultHostName)]"
-              },
-              {
-                  "name": "BACKEND_API_KEY",
-                  "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2022-09-01').keys[0].value]"
-              }
-          ]
-        },
-        "sourceControls": [
-          {
-              "name": "web",
-              "type": "GitHub",
-              "isManualIntegration": false,
-              "deploymentRollbackEnabled": true,
-              "isMercurial": false,
-              "branch": "main",
-              "repositoryUrl": "[parameters('repositoryUrl')]",
-              "repositoryToken": "[parameters('repositoryToken')]",
-              "dependsOn": [
-                  "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
-              ]
-          }
-          ]
-      }
-    },
     //////////Eventgrid Topic//////////
     {
       "type": "Microsoft.EventGrid/topics",
@@ -792,151 +459,28 @@
       "name": "[parameters('eventGridTopicName')]",
       "location": "[parameters('location')]",
       "properties": {
-          "source": "[resourceId('Microsoft.Storage/storageAccounts', parameters('applicationName'))]",
-          "topicType": "Microsoft.Storage.StorageAccounts"
+        "source": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+        "topicType": "Microsoft.Storage.StorageAccounts"
       },
       "dependsOn": [
-          "[resourceId('Microsoft.Storage/storageAccounts', parameters('applicationName'))]"
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
       ]
     },
     //////////Search Service//////////
     {
       "type": "Microsoft.Search/searchServices",
-      "apiVersion": "2020-08-01",
+      "apiVersion": "2024-06-01-preview",
       "name": "[parameters('searchServiceName')]",
       "location": "[parameters('location')]",
       "sku": {
-        "name": "standard"
+        "name": "basic"
       },
       "properties": {
         "replicaCount": 1,
         "partitionCount": 1,
         "hostingMode": "default",
+        "publicNetworkAccess": "Enabled",
         "semanticSearch": "free"
-      }
-    },
-    //////////Search Service Create Index//////////
-    {
-      "type": "Microsoft.Search/searchServices/indexes",
-      "apiVersion": "2020-08-01",
-      "name": "[concat(parameters('searchServiceName'), '/', parameters('applicationName'), '-index')]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]"
-      ],
-      "properties": {
-        "fields": [
-          {
-            "name": "id",
-            "type": "Edm.String",
-            "searchable": false,
-            "filterable": false,
-            "retrievable": true,
-            "stored": true,
-            "sortable": false,
-            "facetable": false,
-            "key": true
-          },
-          {
-            "name": "content",
-            "type": "Edm.String",
-            "searchable": true,
-            "filterable": false,
-            "retrievable": true,
-            "stored": true,
-            "sortable": false,
-            "facetable": false,
-            "analyzer": "en.microsoft"
-          },
-          {
-            "name": "content_vector",
-            "type": "Collection(Edm.Single)",
-            "searchable": true,
-            "filterable": false,
-            "retrievable": true,
-            "stored": true,
-            "sortable": false,
-            "facetable": false,
-            "dimensions": 1536,
-            "vectorSearchProfile": "embedding_config"
-          },
-          {
-            "name": "metadata",
-            "type": "Edm.String",
-            "searchable": true,
-            "filterable": true,
-            "retrievable": true,
-            "stored": true,
-            "sortable": false,
-            "facetable": true
-          },
-          {
-            "name": "source",
-            "type": "Edm.String",
-            "searchable": true,
-            "filterable": true,
-            "retrievable": true,
-            "stored": true,
-            "sortable": false,
-            "facetable": true
-          },
-          {
-            "name": "file_name",
-            "type": "Edm.String",
-            "searchable": true,
-            "filterable": true,
-            "retrievable": true,
-            "stored": true,
-            "sortable": false,
-            "facetable": true
-          },
-          {
-            "name": "page_number",
-            "type": "Edm.String",
-            "searchable": true,
-            "filterable": true,
-            "retrievable": true,
-            "stored": true,
-            "sortable": false,
-            "facetable": false
-          }
-        ],
-        "similarity": {
-          "@odata.type": "#Microsoft.Azure.Search.BM25Similarity"
-        },
-        "semantic": {
-          "configurations": [
-            {
-              "name": "default",
-              "prioritizedFields": {
-                "prioritizedContentFields": [
-                  {
-                    "fieldName": "content"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        "vectorSearch": {
-          "algorithms": [
-            {
-              "name": "hnsw_config",
-              "kind": "hnsw",
-              "hnswParameters": {
-                "metric": "cosine",
-                "m": 4,
-                "efConstruction": 400,
-                "efSearch": 500
-              }
-            }
-          ],
-          "profiles": [
-            {
-              "name": "embedding_config",
-              "algorithm": "hnsw_config"
-            }
-          ]
-        }
       }
     },
     //////////Azure OpenAI//////////
@@ -958,14 +502,16 @@
     //////////Azure OpenAI Language Service//////////
     {
       "type": "Microsoft.CognitiveServices/accounts",
-      "apiVersion": "2021-10-01",
+      "apiVersion": "2024-04-01-preview",
       "name": "[parameters('languageServicesName')]",
       "location": "[parameters('location')]",
       "sku": {
         "name": "S"
       },
-      "kind": "Language",
-      "properties": {}
+      "kind": "TextAnalytics",
+      "properties": {
+        "customSubDomainName": "[parameters('languageServicesName')]"
+      }
     },
     //////////Azure Document Intelligence//////////
     {
@@ -1017,18 +563,6 @@
         }
       }
     },
-    //////////Azure Document Intelligence//////////
-    {
-      "type": "Microsoft.CognitiveServices/accounts",
-      "apiVersion": "2021-10-01",
-      "name": "[parameters('documentIntelligenceName')]",
-      "location": "[parameters('location')]",
-      "sku": {
-        "name": "S0"
-      },
-      "kind": "FormRecognizer",
-      "properties": {}
-    },
     //////////Azure OpenAI Deploy GPT4 Model//////////
     {
       "type": "Microsoft.CognitiveServices/accounts/deployments",
@@ -1072,76 +606,302 @@
       "dependsOn": [
         "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]"
       ]
-    }
-  ],
-  "outputs": {
-    "storageAccountName": {
-      "type": "string",
-      "value": "[parameters('storageAccountName')]"
     },
-    "containerName": {
-      "type": "string",
-      "value": "[concat(parameters('applicationName'), 'docs')]"
+    {
+      "type": "Microsoft.Sql/servers/firewallRules",
+      "apiVersion": "2023-08-01-preview",
+      "name": "[concat(parameters('sqlServerName'), '/AllowAllWindowsAzureIps')]",
+      "dependsOn": [
+          "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]"
+      ],
+      "properties": {
+          "startIpAddress": "0.0.0.0",
+          "endIpAddress": "0.0.0.0"
+      }
+    },
+    //////////Linux Webapp Frontend//////////
+    {
+      "type": "Microsoft.Web/sites",
+        "apiVersion": "2022-09-01",
+        "name": "[parameters('frontendWebAppName')]",
+        "location": "[parameters('location')]",
+        "tags": {
+            "environment": "[parameters('environmentType')]",
+            "application_name": "[parameters('applicationName')]",
+            "project_code": "[parameters('projectCode')]",
+            "owner": "[parameters('owner')]"
+        },
+        "kind": "app,linux,container",
+        "dependsOn": [
+            "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]"
+        ],
+        "properties": {
+            "httpsOnly": true,
+            "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
+            "siteConfig": {
+            "alwaysOn": true,
+            "linuxFxVersion": "[format('DOCKER|{0}/{1}', variables('acrLoginServer'), variables('acrFrontendImage'))]",
+            "appSettings": [
+            {
+                "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
+                "value": "false"
+            },
+            {
+                "name": "DOCKER_REGISTRY_SERVER_URL",
+                "value": "[format('https://{0}', variables('acrLoginServer'))]"
+            },
+            {
+                "name": "DOCKER_REGISTRY_SERVER_USERNAME",
+                "value": "[parameters('acrUsername')]"
+            },
+            { 
+              "name": "DOCKER_REGISTRY_SERVER_PASSWORD", 
+              "value": "[parameters('acrPassword')]" 
+            },
+            {
+              "name": "NEXTAUTH_SECRET",
+              "value": "ZmPyZU/WBIa4oATeVrDnm/ZDnAq8dzVLtrbZZRcoMRg="
+            },
+            {
+              "name": "NEXTAUTH_URL",
+              "value": "[format('https://{0}.azurewebsites.net', parameters('frontendWebAppName'))]"
+            },
+            {
+              "name": "AZURE_AD_CLIENT_ID",
+              "value": "[parameters('applicationID')]"
+            },
+            {
+              "name": "AZURE_AD_CLIENT_SECRET",
+              "value": "[parameters('applicationSecretKey')]"
+            },
+            {
+              "name": "AZURE_AD_TENANT_ID",
+              "value": "[subscription().tenantId]"
+            },
+            {
+              "name": "API_URL",
+              "value": "[format('https://{0}.azurewebsites.net', parameters('backendWebAppName'))]"
+            },
+            {
+              "name": "ARAB_IMAGE",
+              "value": "https://res.cloudinary.com/lemon-mint/image/upload/v1721982067/arab4_h8chkz.png"
+            },
+            {
+              "name": "PROMO_IMAGE",
+              "value": ""
+            },
+            {
+              "name": "FEEDBACK_LINK",
+              "value": ""
+            },
+            {
+              "name": "INDEX_NAME",
+              "value": "[format('{0}-index', parameters('applicationName'))]"
+            },
+            {
+              "name": "ORGANIZATION_NAME",
+              "value": "[parameters('organizationName')]"
+            },
+            {
+              "name": "COMPANY_NAME",
+              "value": "[parameters('organizationName')]"
+            },
+            {
+              "name": "WEBSITE_NODE_DEFAULT_VERSION",
+              "value": "18-lts"
+            },
+            { 
+              "name": "WEBSITES_CONTAINER_START_TIME_LIMIT", 
+              "value": "1800" 
+            },
+            {
+              "name": "DOCKER_ENABLE_CI",
+              "value": "true"
+            }
+          ]
+        }
       },
-    "servicePlanName": {
-      "type": "string",
-      "value": "[parameters('servicePlanName')]"
+      "identity": {
+        "type": "SystemAssigned"
+      }
     },
-    "linuxWebAppBE": {
-      "type": "string",
-      "value": "[parameters('linuxWebAppBE')]"
+    //////////Linux Webapp Backend//////////
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-12-01",
+      "name": "[parameters('backendWebAppName')]",
+      "location": "[parameters('location')]",
+      "tags": {
+        "environment": "[parameters('environmentType')]",
+        "application_name": "[parameters('applicationName')]",
+        "project_code": "[parameters('projectCode')]",
+        "owner": "[parameters('owner')]"
+      },
+      "kind": "app,linux,container",
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]",
+        "[resourceId('Microsoft.Insights/components', parameters('appInsightsBE'))]",
+        "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('languageServicesName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+        "[resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName'))]",
+        "[resourceId('Microsoft.Sql/servers/databases', parameters('sqlServerName'), parameters('sqlDatabaseName'))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts', parameters('openAiServiceName'))]"
+      ],
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]": {}
+        }
+      },
+      "properties": {
+        "httpsOnly": true,
+        "keyVaultReferenceIdentity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]",
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
+        "siteConfig": {
+          "linuxFxVersion": "[format('DOCKER|{0}/{1}', variables('acrLoginServer'), variables('acrBackendImage'))]",
+          "alwaysOn": true,
+          "vnetRouteAllEnabled": true,
+          "appCommandLine": "python -m uvicorn main:app --host 0.0.0.0 --port 8000",
+          "pythonversion": "3.10",
+          "cors": {
+            "allowedOrigins": [
+                   "http://localhost:3000",
+                   "[concat('https://', parameters('frontendWebAppName'), '.azurewebsites.net')]"
+                ],
+            "supportCredentials": true
+          },
+          "appSettings": [
+            { "name": "ALLOWED_ORIGINS", "value": "[concat('https://', parameters('frontendWebAppName'), '.azurewebsites.net')]" },
+            { "name": "DATABASE_HOST", "value": "[reference(resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))).fullyQualifiedDomainName]" },
+            { "name": "DATABASE_HOSTNAME", "value": "[reference(resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))).fullyQualifiedDomainName]" },
+            { "name": "DATABASE_DB", "value": "[parameters('sqlDatabaseName')]" },
+            { "name": "DATABASE_USER", "value": "[parameters('sqlAdminUsername')]" },
+            { "name": "DATABASE_PASSWORD", "value": "[parameters('sqlAdminPassword')]" },
+            { "name": "ACCESS_TOKEN_EXPIRES_IN", "value": "15" },
+            { "name": "REFRESH_TOKEN_EXPIRES_IN", "value": "60" },
+            { "name": "JWT_ALGORITHM", "value": "HS256" },
+            { "name": "AZURE_CLIENT_ID", "value": "[parameters('applicationID')]" },
+            { "name": "AZURE_CLIENT_SECRET", "value": "[parameters('applicationSecretKey')]" },
+            { "name": "AZURE_TENANT_ID", "value": "[subscription().tenantId]" },
+            { "name": "AZURE_REDIS_CACHE_HOST", "value": "[reference(resourceId('Microsoft.Cache/Redis', parameters('redisCacheName'))).hostName]" },
+            { "name": "AZURE_REDIS_CACHE_PASSWORD", "value": "[listKeys(resourceId('Microsoft.Cache/Redis', parameters('redisCacheName')), '2022-06-01').primaryKey]" },
+            { "name": "AZURE_REDIS_CACHE_PORT", "value": "6380" },
+            { "name": "AZURE_OPENAI_API_BASE", "value": "[format('https://{0}.openai.azure.com/', parameters('openAiServiceName'))]" },
+            { "name": "AZURE_OPENAI_API_KEY", "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts', parameters('openAiServiceName')), '2021-04-30').key1]" },
+            { "name": "AZURE_OPENAI_MODEL_GPT4_TURBO", "value": "gpt-4o" },
+            { "name": "AZURE_OPENAI_MODEL_GPT35", "value": "gpt35-turbo" },
+            { "name": "AZURE_OPENAI_EMBED_MODEL", "value": "ada-002" },
+            { "name": "OPENAI_API_KEY", "value": "" },
+            { "name": "OPENAI_API_VERSION", "value": "2024-04-01-preview" },
+            { "name": "OPENAI_MODEL", "value": "gpt4-turbo" },
+            { "name": "OPENAI_EMBED_MODEL", "value": "text-embedding-3-small" },
+            { "name": "AZURE_COGNITIVE_SEARCH_ENDPOINT", "value": "[format('https://{0}.search.windows.net', parameters('searchServiceName'))]" },
+            { "name": "AZURE_COGNITIVE_SEARCH_API_KEY", "value": "[listAdminKeys(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), '2024-06-01-preview').primaryKey]" },
+            { "name": "SEARCH_SERVICE_NAME", "value": "[parameters('searchServiceName')]" },
+            { "name": "AZURE_COGNITIVE_SEARCH_API_VERSION", "value": "2024-06-01-preview" },
+            { "name": "AZURE_STORAGE_NAME", "value": "[parameters('storageAccountName')]" },
+            { "name": "AZURE_STORAGE_KEY", "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2021-08-01').keys[0].value]" },
+            { "name": "AZURE_STORAGE_CONNECTION_STRING", "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', parameters('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2021-08-01').keys[0].value)]" },
+            { "name": "AZURE_BLOB_CONTAINER_NAME", "value": "[parameters('blobCogSearchContainerName')]" },
+            { "name": "DOCUMENT_CHUNK_SIZE", "value": "1000" },
+            { "name": "DOCUMENT_CHUNK_OVERLAP", "value": "100" },
+            { "name": "DOCUMENT_K_TOP", "value": "5" },
+            { "name": "UPLOAD_DOCUMENTS", "value": "False" },
+            { "name": "INDEX_DOCUMENT", "value": "False" },
+            { "name": "INDEX_NAME", "value": "[concat(parameters('applicationName'), '-index')]" },
+            { "name": "ENABLE_JSON_INGESTION", "value": "True" },
+            { "name": "ENBALE_SIMPLE_TEXT_INGESTION", "value": "True" },
+            { "name": "ENABLE_TEXT_RAPTOR_INGESTION", "value": "False" },
+            { "name": "ENABLE_TABLE_INGESTION", "value": "False" },
+            { "name": "ENABLE_IMAGE_INGESTION", "value": "False" },
+            { "name": "LANGCHAIN_API_KEY", "value": "" },
+            { "name": "LANGCHAIN_PROJECT", "value": "" },
+            { "name": "AZURE_APPINSIGHTS_INSTRUMENTATIONKEY", "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsBE'))).InstrumentationKey]" },
+            { "name": "AZURE_APPINSIGHTS_CONNECTION_STRING", "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsBE'))).ConnectionString]" },
+            { "name": "AZURE_APPCONFIG_ENDPOINT", "value": "[reference(resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName'))).endpoint]" },
+            { "name": "AZURE_APPCONFIG_KEY", "value": "[listKeys(resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName')), '2021-10-01-preview').value[0].value]" },
+            { "name": "AZURE_APPCONFIG_CONNECTION_STRING", "value": "[listKeys(resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName')), '2021-10-01-preview').value[0].connectionString]" },
+            { "name": "AZURE_LANGUAGE_ENDPOINT", "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('languageServicesName'))).endpoint]" },
+            { "name": "AZURE_LANGUAGE_KEY", "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts', parameters('languageServicesName')), '2021-10-01').key1]" },
+            { "name": "AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT", "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('documentIntelligenceName'))).endpoint]" },
+            { "name": "AZURE_DOCUMENT_INTELLIGENCE_KEY", "value": "[listKeys(resourceId('Microsoft.CognitiveServices/accounts', parameters('documentIntelligenceName')), '2021-10-01').key1]" },
+            { "name": "LOG_LEVEL", "value": "DEBUG" },
+            { "name": "WEBSITES_CONTAINER_START_TIME_LIMIT", "value": "1800" },
+            { "name": "MI_CLIENT_ID", "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))).clientId]" },
+            { "name": "DOCKER_ENABLE_CI", "value": "True" },
+            { "name": "DOCKER_REGISTRY_SERVER_USERNAME", "value": "[parameters('acrUsername')]" },
+            { "name": "DOCKER_REGISTRY_SERVER_URL", "value": "[format('https://{0}', variables('acrLoginServer'))]" },
+            { "name": "DOCKER_REGISTRY_SERVER_PASSWORD", "value": "[parameters('acrPassword')]" }
+          ]
+        }
+      }
     },
-    "linuxWebAppFE": {
-      "type": "string",
-      "value": "[parameters('linuxWebAppFE')]"
-    },
-    "keyVaultName": {
-      "type": "string",
-      "value": "[parameters('keyVaultName')]"
-    },
-    "appInsightsBlob": {
-      "type": "string",
-      "value": "[parameters('appInsightsBlob')]"
-    },
-    "appInsightsBE": {
-      "type": "string",
-      "value": "[parameters('appInsightsBE')]"
-    },
-    "logAnalyticsWorkspaceName": {
-      "type": "string",
-      "value": "[parameters('logAnalyticsWorkspaceName')]"
-    },
-    "redisCacheName": {
-      "type": "string",
-      "value": "[parameters('redisCacheName')]"
-    },
-    "functionAppName": {
-      "type": "string",
-      "value": "[parameters('functionAppName')]"
-    },
-    "logicAppName": {
-      "type": "string",
-      "value": "[parameters('logicAppName')]"
-    },
-    "eventGridTopicName": {
-      "type": "string",
-      "value": "[parameters('eventGridTopicName')]"
-    },
-    "searchServiceName": {
-      "type": "string",
-      "value": "[parameters('searchServiceName')]"
-    },
-    "openAiServiceName": {
-      "type": "string",
-      "value": "[parameters('openAiServiceName')]"
-    },
-    "sqlServerName": {
-      "type": "string",
-      "value": "[parameters('sqlServerName')]"
-    },
-    "sqlDatabaseName": {
-      "type": "string",
-      "value": "[parameters('sqlDatabaseName')]"
+    //////////Linux Function App//////////
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[parameters('functionAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "functionapp,linux",
+      "tags": {
+        "environment"     : "[parameters('environmentType')]",
+        "application_name": "[parameters('applicationName')]",
+        "project_code"    : "[parameters('projectCode')]",
+        "owner"           : "[parameters('owner')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+        "[resourceId('Microsoft.Insights/components', parameters('appInsightsBlob'))]",
+        "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]"
+      ],
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "httpsOnly": true,
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
+        "siteConfig": {
+          "linuxFxVersion": "Python|3.10",
+          "vnetRouteAllEnabled": true,
+          "alwaysOn": true,
+          "pythonversion": "3.10",
+          "appSettings": [
+              {
+                  "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+                  "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsBlob'))).InstrumentationKey]"
+              },
+              {
+                  "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                  "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsBlob'))).ConnectionString]"
+              },
+              {
+                  "name": "AzureWebJobsStorage",
+                  "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', parameters('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2021-08-01').keys[0].value)]"
+              },
+              {
+                  "name": "FUNCTIONS_EXTENSION_VERSION",
+                  "value": "~4"
+              },
+              {
+                  "name": "FUNCTIONS_WORKER_RUNTIME",
+                  "value": "python"
+              },
+              {
+                  "name": "CONTAINER_NAME",
+                  "value": "[parameters('blobCogSearchContainerName')]"
+              },
+              {
+                  "name": "BACKEND_API_URL",
+                  "value": "[concat('https://', parameters('backendWebAppName'), '.azurewebsites.net')]"
+              },
+              {
+                  "name": "BACKEND_API_KEY",
+                  "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2022-09-01').keys[0].value]"
+              }
+          ]
+        }
+      }
     }
-  }
+  ]
 }

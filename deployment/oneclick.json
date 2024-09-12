@@ -4,23 +4,22 @@
   "parameters": {
     "organizationName": {
       "type": "string",
-       "defaultValue": "Maadenn",
       "metadata": {
         "description": "Enter the organization or company name"
       }
     },
     "applicationID": {
-      "type": "string"
+      "type": "string",
+      "metadata": {
+        "description": "App Registration Client ID"
+      }
     },
-    "applicationToken": {
-      "type": "securestring"
+    "applicationSecretKey": {
+      "type": "securestring",
+      "metadata": {
+        "description": "App Registration Secret Key"
+      }
     },
-    "repositoryUrl": {
-    "type": "string"
-    },
-    "repositoryToken": {
-      "type": "securestring"
-      },
     "applicationName": {
       "type": "string",
       "defaultValue": "[toLower(split(parameters('organizationName'), ' ')[0])]",
@@ -37,41 +36,15 @@
     },
     "environmentType": {
       "type": "string",
-      "defaultValue": "nonprod",
+      "defaultValue": "dev",
       "allowedValues": [
-        "nonprod",
+        "dev",
         "prod"
       ]
     },
-    "acrName": {
-      "type": "string",
-      "defaultValue": "fastapidemo",
-      "metadata": {
-        "description": "The username for the Azure Container Registry"
-      }
-    },
-    "acrFrontendImage": {
-      "type": "string",
-      "defaultValue": "knowledgebot-frontend:maaden",
-      "metadata": {
-        "description": "The name of the Azure Container Registry"
-      }
-    },
-    "acrBackendImage": {
-      "type": "string",
-      "defaultValue": "knowledgebot-backend:maaden",
-      "metadata": {
-        "description": "The name of the Azure Container Registry"
-      }
-    },
-    "acrLoginServer": {
-      "type": "string",
-      "metadata": {
-        "description": "The login server for the Azure Container Registry"
-      }
-    },
     "acrUsername": {
       "type": "string",
+      "defaultValue": "fastapidemo",
       "metadata": {
         "description": "The username for the Azure Container Registry"
       }
@@ -101,13 +74,6 @@
       "defaultValue": "[concat(parameters('applicationName'), 'docs')]",
       "metadata": {
         "description": "Azure Cognitive Search Container"
-      }
-    },
-    "blobApplicationContainerName": {
-      "type": "string",
-      "defaultValue": "[concat(parameters('applicationName'), 'app')]",
-      "metadata": {
-        "description": "Application Container"
       }
     },
     "servicePlanName": {
@@ -258,7 +224,10 @@
     }
   },
   "variables": {
-      "appConfigSku": "standard"
+      "appConfigSku": "standard",
+      "acrFrontendImage": "knowledgebot-frontend:maaden",
+      "acrBackendImage": "knowledgebot-backend:maaden",
+      "acrLoginServer": "fastapidemo.azurecr.io"
   },
   "resources": [
     //////////Storage Account//////////
@@ -291,16 +260,6 @@
         "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
       ]
     },
-    //////////Create Application Storage Container//////////
-    {
-      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-      "apiVersion": "2021-08-01",
-      "name": "[concat(parameters('storageAccountName'), '/default/', parameters('blobApplicationContainerName'))]",
-      "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
-      ],
-      "properties": {}
-    },
     //////////Create App Config//////////
     {
       "type": "Microsoft.AppConfiguration/configurationStores",
@@ -321,7 +280,7 @@
         "[resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName'))]"
       ],
       "properties": {
-        "value": "{\"General\": \"mobizgeneraldocs\", \"Sales\": \"mobizsalesdocs\", \"HR\": \"mobizhrdocs\", \"Tatweer\": \"tatweerdocs\", \"Maaden\": \"maadendocs\"}",
+        "value": "[concat('{\"', parameters('organizationName'), '\": \"', parameters('blobCogSearchContainerName'), '\"}')]",
         "contentType": "application/json"
       }
     },
@@ -334,7 +293,7 @@
         "[resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName'))]"
       ],
       "properties": {
-        "value": "{\"kb-hr\": [\"mobizhrindex\", \"mobizgeneralindex\"], \"kb-sales\": [\"mobizsalesindex\", \"mobizgeneralindex\"],\"kb-dev\": [\"mobizgeneralindex\", \"tatweer-index-custom\", \"maaden-index\"],\"kb-tatweer\": [\"tatweer-index-custom\"]}",
+        "value": "[concat('{\"kb-dev\": [\"', format('{0}-index', parameters('applicationName')), '\"]}')]",
         "contentType": "application/json"
       }
     },
@@ -347,7 +306,7 @@
         "[resourceId('Microsoft.AppConfiguration/configurationStores', parameters('appConfigName'))]"
       ],
       "properties": {
-        "value": "{\"mobizgeneralindex\": \"General\", \"mobizhrindex\": \"HR\", \"mobizsalesindex\": \"Sales\", \"tatweer-index-custom\": \"Tatweer\", \"maaden-index\": \"Maaden\"}",
+        "value": "[concat('{\"', format('{0}-index', parameters('applicationName')), '\": \"', parameters('organizationName'), '\"}')]",
         "contentType": "application/json"
       }
     },
@@ -601,6 +560,18 @@
         "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]"
       ]
     },
+    {
+      "type": "Microsoft.Sql/servers/firewallRules",
+      "apiVersion": "2023-08-01-preview",
+      "name": "[concat(parameters('sqlServerName'), '/AllowAllWindowsAzureIps')]",
+      "dependsOn": [
+          "[resourceId('Microsoft.Sql/servers', parameters('sqlServerName'))]"
+      ],
+      "properties": {
+          "startIpAddress": "0.0.0.0",
+          "endIpAddress": "0.0.0.0"
+      }
+    },
     //////////Linux Webapp Frontend//////////
     {
       "type": "Microsoft.Web/sites",
@@ -622,7 +593,7 @@
             "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
             "siteConfig": {
             "alwaysOn": true,
-            "linuxFxVersion": "[format('DOCKER|{0}/{1}', parameters('acrLoginServer'), parameters('acrFrontendImage'))]",
+            "linuxFxVersion": "[format('DOCKER|{0}/{1}', variables('acrLoginServer'), variables('acrFrontendImage'))]",
             "appSettings": [
             {
                 "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
@@ -630,15 +601,15 @@
             },
             {
                 "name": "DOCKER_REGISTRY_SERVER_URL",
-                "value": "[format('https://{0}', parameters('acrLoginServer'))]"
+                "value": "[format('https://{0}', variables('acrLoginServer'))]"
             },
             {
                 "name": "DOCKER_REGISTRY_SERVER_USERNAME",
                 "value": "[parameters('acrUsername')]"
             },
-            {
-                "name": "DOCKER_REGISTRY_SERVER_PASSWORD",
-                "value": "[parameters('acrPassword')]"
+            { 
+              "name": "DOCKER_REGISTRY_SERVER_PASSWORD", 
+              "value": "[parameters('acrPassword')]" 
             },
             {
               "name": "NEXTAUTH_SECRET",
@@ -654,7 +625,7 @@
             },
             {
               "name": "AZURE_AD_CLIENT_SECRET",
-              "value": "[parameters('applicationToken')]"
+              "value": "[parameters('applicationSecretKey')]"
             },
             {
               "name": "AZURE_AD_TENANT_ID",
@@ -740,7 +711,7 @@
         "keyVaultReferenceIdentity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))]",
         "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('servicePlanName'))]",
         "siteConfig": {
-          "linuxFxVersion": "[format('DOCKER|{0}/{1}', parameters('acrLoginServer'), parameters('acrBackendImage'))]",
+          "linuxFxVersion": "[format('DOCKER|{0}/{1}', variables('acrLoginServer'), variables('acrBackendImage'))]",
           "alwaysOn": true,
           "vnetRouteAllEnabled": true,
           "appCommandLine": "python -m uvicorn main:app --host 0.0.0.0 --port 8000",
@@ -763,14 +734,14 @@
             { "name": "REFRESH_TOKEN_EXPIRES_IN", "value": "60" },
             { "name": "JWT_ALGORITHM", "value": "HS256" },
             { "name": "AZURE_CLIENT_ID", "value": "[parameters('applicationID')]" },
-            { "name": "AZURE_CLIENT_SECRET", "value": "[parameters('applicationToken')]" },
+            { "name": "AZURE_CLIENT_SECRET", "value": "[parameters('applicationSecretKey')]" },
             { "name": "AZURE_TENANT_ID", "value": "[subscription().tenantId]" },
             { "name": "AZURE_REDIS_CACHE_HOST", "value": "[reference(resourceId('Microsoft.Cache/Redis', parameters('redisCacheName'))).hostName]" },
             { "name": "AZURE_REDIS_CACHE_PASSWORD", "value": "[listKeys(resourceId('Microsoft.Cache/Redis', parameters('redisCacheName')), '2022-06-01').primaryKey]" },
             { "name": "AZURE_REDIS_CACHE_PORT", "value": "6380" },
             { "name": "AZURE_OPENAI_API_BASE", "value": "https://mobiz-gpt-4-deployment.openai.azure.com/" },
             { "name": "AZURE_OPENAI_API_KEY", "value": "[parameters('aoiKey')]" },
-            { "name": "AZURE_OPENAI_MODEL_GPT4_TURBO", "value": "gpt4-turbo" },
+            { "name": "AZURE_OPENAI_MODEL_GPT4_TURBO", "value": "gpt-4o" },
             { "name": "AZURE_OPENAI_MODEL_GPT35", "value": "gpt35-turbo" },
             { "name": "AZURE_OPENAI_EMBED_MODEL", "value": "ada-002" },
             { "name": "OPENAI_API_KEY", "value": "" },
@@ -782,10 +753,9 @@
             { "name": "SEARCH_SERVICE_NAME", "value": "[parameters('searchServiceName')]" },
             { "name": "AZURE_COGNITIVE_SEARCH_API_VERSION", "value": "2024-06-01-preview" },
             { "name": "AZURE_STORAGE_NAME", "value": "[parameters('storageAccountName')]" },
-            { "name": "AZURE_STORAGE_KEY", "value": "]listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2021-08-01').keys[0].value)]" },
+            { "name": "AZURE_STORAGE_KEY", "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2021-08-01').keys[0].value]" },
             { "name": "AZURE_STORAGE_CONNECTION_STRING", "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', parameters('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2021-08-01').keys[0].value)]" },
-            { "name": "AZURE_SEARCH_BLOB_CONTAINER_NAME", "value": "[parameters('blobCogSearchContainerName')]" },
-            { "name": "AZURE_APP_BLOB_CONTAINER_NAME", "value": "[parameters('blobApplicationContainerName')]" },
+            { "name": "AZURE_BLOB_CONTAINER_NAME", "value": "[parameters('blobCogSearchContainerName')]" },
             { "name": "DOCUMENT_CHUNK_SIZE", "value": "1000" },
             { "name": "DOCUMENT_CHUNK_OVERLAP", "value": "100" },
             { "name": "DOCUMENT_K_TOP", "value": "5" },
@@ -813,7 +783,7 @@
             { "name": "MI_CLIENT_ID", "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', parameters('managedIdentityName'))).clientId]" },
             { "name": "DOCKER_ENABLE_CI", "value": "True" },
             { "name": "DOCKER_REGISTRY_SERVER_USERNAME", "value": "[parameters('acrUsername')]" },
-            { "name": "DOCKER_REGISTRY_SERVER_URL", "value": "[format('https://{0}', parameters('acrLoginServer'))]" },
+            { "name": "DOCKER_REGISTRY_SERVER_URL", "value": "[format('https://{0}', variables('acrLoginServer'))]" },
             { "name": "DOCKER_REGISTRY_SERVER_PASSWORD", "value": "[parameters('acrPassword')]" }
           ]
         }
@@ -882,22 +852,7 @@
                   "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2022-09-01').keys[0].value]"
               }
           ]
-        },
-        "sourceControls": [
-          {
-              "name": "web",
-              "type": "GitHub",
-              "isManualIntegration": false,
-              "deploymentRollbackEnabled": true,
-              "isMercurial": false,
-              "branch": "main",
-              "repositoryUrl": "[parameters('repositoryUrl')]",
-              "repositoryToken": "[parameters('repositoryToken')]",
-              "dependsOn": [
-                  "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
-              ]
-          }
-          ]
+        }
       }
     }
   ]
