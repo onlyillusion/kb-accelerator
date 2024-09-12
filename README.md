@@ -84,8 +84,8 @@ If your Knowledge Bot HR integrates with OpenAI models, follow these steps:
 2. In the **Functions** tab, click **Add** to create a new function.
 3. Select the appropriate template (e.g., HTTP Trigger) based on your chatbot logic.
 4. Add the **function code** that handles requests to and from the chatbot's backend.
-   - You can upload a file, or paste the code into the portal's editor.
-5. Save and test the function by sending requests from the chatbot.
+   - use deployment center to deploy code using github connection. Use the ingestionfunction folder for deploying the function code.
+5. Save and test the function by uploading a file from the chatbot.
 
 ### Step 5: Test Your Deployment
 
