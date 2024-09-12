@@ -51,7 +51,7 @@ To deploy the necessary Azure infrastructure, click on the appropriate **Deploy 
   [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fasyikinmobiz%2Fkb-accelerator%2Fmain%2Fdeployment%2Foneclick.json)
 
 - **With Azure OpenAI**:  
-  [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2F2Fasyikinmobiz%2Fkb-accelerator%2Fmain%2Fdeployment%2Foneclickaoi.json)
+  [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fasyikinmobiz%2Fkb-accelerator%2Fmain%2Fdeployment%2Foneclickaoi.json)
 
 > **Important**: This will provision the infrastructure only. You must complete the following manual steps to finalize the deployment.
 
